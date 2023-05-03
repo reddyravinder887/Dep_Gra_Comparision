@@ -1,12 +1,17 @@
 import com.github.javaparser.JavaParser;
+import com.github.javaparser.ParseResult;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.Node;
+import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.expr.ObjectCreationExpr;
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter;
 import javafx.util.Pair;
@@ -27,7 +32,9 @@ public class DependencyGraphExtractor {
 
     public List<Pair<String, String>> extractDependencies() throws FileNotFoundException {
         File file = new File(filePath);
-        CompilationUnit compilationUnit = JavaParser.parse(file);
+        JavaParser javaParser = new JavaParser();
+        ParseResult<CompilationUnit> parseResult = javaParser.parse(file);
+         CompilationUnit compilationUnit = parseResult.getResult().orElse(null);
         DependencyVisitor visitor = new DependencyVisitor();
         visitor.visit(compilationUnit, null);
         return visitor.getDependencies();
@@ -54,15 +61,15 @@ public class DependencyGraphExtractor {
                 String className = n.getNameAsString();
                 String classFullName = currentPackage + "." + className;
                 if (n.getExtendedTypes().size() > 0) {
-                    for (NameExpr expr : n.getExtendedTypes()) {
-                        String extendedType = expr.getNameAsString();
-                        dependencies.add(new Pair<>(classFullName, currentPackage + "." + extendedType));
+                    for (ClassOrInterfaceType extendedType : n.getExtendedTypes()) {
+                        String typeName = extendedType.getNameAsString();
+                        dependencies.add(new Pair<>(classFullName, currentPackage + "." + typeName));
                     }
                 }
                 if (n.getImplementedTypes().size() > 0) {
-                    for (NameExpr expr : n.getImplementedTypes()) {
-                        String implementedType = expr.getNameAsString();
-                        dependencies.add(new Pair<>(classFullName, currentPackage + "." + implementedType));
+                    for (ClassOrInterfaceType implementedType : n.getImplementedTypes()) {
+                        String typeName = implementedType.getNameAsString();
+                        dependencies.add(new Pair<>(classFullName, currentPackage + "." + typeName));
                     }
                 }
             }
@@ -74,8 +81,8 @@ public class DependencyGraphExtractor {
             String enumName = n.getNameAsString();
             String enumFullName = currentPackage + "." + enumName;
             if (n.getImplementedTypes().size() > 0) {
-                for (NameExpr expr : n.getImplementedTypes()) {
-                    String implementedType = expr.getNameAsString();
+                for (ClassOrInterfaceType implementedType : n.getImplementedTypes()) {
+                    String typeName = implementedType.getNameAsString();
                     dependencies.add(new Pair<>(enumFullName, currentPackage + "." + implementedType));
                 }
             }
@@ -93,6 +100,8 @@ public class DependencyGraphExtractor {
                     }
                 }
             }
+            super.visit(n, arg);
+        }
 		        @Override
         public void visit(MethodDeclaration n, Void arg) {
             String returnType = n.getTypeAsString();
@@ -100,10 +109,14 @@ public class DependencyGraphExtractor {
                 n.getBody().get().accept(new VoidVisitorAdapter<Void>() {
                     @Override
                     public void visit(NameExpr n, Void arg) {
-                        Optional<String> qualifier = n.getQualifier();
-                        if (qualifier.isPresent()) {
-                            dependencies.add(new Pair<>(currentPackage + "." + returnType, currentPackage + "." + qualifier.get()));
-                        }
+                        Optional<Node> parentNode = n.getParentNode();
+                if (parentNode.isPresent() && parentNode.get() instanceof MethodCallExpr) {
+                    MethodCallExpr methodCallExpr = (MethodCallExpr) parentNode.get();
+                    if (methodCallExpr.getScope().isPresent()) {
+                        String qualifier = methodCallExpr.getScope().get().toString();
+                        dependencies.add(new Pair<>(currentPackage + "." + returnType, currentPackage + "." + qualifier));
+                    }
+                }
                         super.visit(n, arg);
                     }
                 }, null);
@@ -120,16 +133,20 @@ public class DependencyGraphExtractor {
         }
     }
 
-}
+
 
 public static void main(String[] args) {
-    DependencyGraphExtractor extractor = new DependencyGraphExtractor("D:\\Master Study\\Thesis\\SSE\\Source_Files\\AboutBlock.java");
+    DependencyGraphExtractor extractor = new DependencyGraphExtractor("D:\\Master Study\\Thesis\\SSE\\Source_Files\\AbstractContractCreateTest.java");
     try {
         List<Pair<String, String>> dependencies = extractor.extractDependencies();
+        for (Pair<String, String> dependency : dependencies) {
+            System.out.println(dependency.getKey() + "  dependes on -> " + dependency.getValue());
+        }
         // do something with the dependencies
     } catch (FileNotFoundException e) {
         e.printStackTrace();
     }
+}
 }
 
 
