@@ -29,7 +29,9 @@
  ## Conclusion:
  
   By this similarity number, we will conclude in our research that whether the graphs are underestimated( the similarity number is too low) or overestimated (( the similarity number is too high)
-
+## Research Questions :
+1. is it possible to extract the dependency graph from the individual java class files?
+2. how good is the extracted dependency graph when compared with ground truth tools like Jdeps?
 
 ## Reference:
 
